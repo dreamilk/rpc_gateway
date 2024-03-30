@@ -9,7 +9,7 @@ import (
 )
 
 func getDefaultLogger() *zap.Logger {
-	logger, _ := zap.NewDevelopment(zap.AddCaller())
+	logger, _ := zap.NewDevelopment(zap.AddCaller(), zap.AddCallerSkip(1))
 	return logger
 }
 

@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/dreamilk/rpc_gateway/config"
 	"github.com/dreamilk/rpc_gateway/handler"
+	"github.com/dreamilk/rpc_gateway/log"
 )
 
 func main() {
@@ -15,7 +16,7 @@ func main() {
 	http.HandleFunc("/", handler.ServiceGateway)
 
 	if err := http.ListenAndServe(config.DeployConf.Addr, nil); err != nil {
-		log.Fatalln(err)
+		log.Error(context.TODO(), "ListenAndServe failed")
 	}
 
 }
