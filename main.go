@@ -36,7 +36,7 @@ func main() {
 	http.HandleFunc("/", handler.ServiceGateway)
 
 	if err := http.ListenAndServe(config.DeployConf.Addr, nil); err != nil {
-		log.Error(context.TODO(), "ListenAndServe failed")
+		log.Error(context.TODO(), "ListenAndServe failed", zap.Error(err))
 	}
 
 }
