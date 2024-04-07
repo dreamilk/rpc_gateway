@@ -1,4 +1,4 @@
-FROM golang:latest
+FROM golang:latest AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,13 @@ RUN cd ./src && \
     cp gateway ../ && \
     cp *yaml ../ && \
     cd ../ && \
-    rm -rf ./src
+    rm -rf ./src && \
+    ls -al
+
+FROM busybox
+WORKDIR /app
+
+COPY --from=builder /app ./
 
 EXPOSE 8080
 
