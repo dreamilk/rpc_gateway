@@ -2,6 +2,6 @@ app_name: short_url
 config:
   - proto: short_url.proto
     api:
-     - path: /url/
-       method: GET
-       grpc: /url/get
+      - path: /url/
+        method: GET
+        grpc: /url/get

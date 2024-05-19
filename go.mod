@@ -2,9 +2,8 @@ module github.com/dreamilk/rpc_gateway
 
 go 1.20
 
-require gopkg.in/yaml.v3 v3.0.1
-
 require (
+    gopkg.in/yaml.v3 v3.0.1
 	github.com/DataDog/datadog-go v4.8.2+incompatible // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect

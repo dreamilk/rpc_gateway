@@ -1,11 +1,19 @@
-FROM golang:latest AS builder
+FROM golang:1.21 AS builder
+
+ENV GO111MODULE=on \
+    GOPROXY=https://goproxy.cn,direct \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
 
 WORKDIR /app
 
-COPY . ./src
+COPY ./ ./src
 
 RUN cd ./src && \
-    GOPROXY="https://goproxy.io" go build -o gateway main.go && \
+    go build -o gateway main.go 
+
+RUN cd ./src && \
     cp gateway ../ && \
     cp *yaml ../ && \
     cd ../ && \
