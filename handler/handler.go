@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/hashicorp/consul/api"
@@ -77,7 +78,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 	}
 	log.Info(ctx, "parse result", zap.Any("api", api))
 
-	body, err := io.ReadAll(req.Body)
+	body, err := getParams(req)
 	if err != nil {
 		return
 	}
@@ -127,6 +128,16 @@ type Api struct {
 	RpcMethod   string
 }
 
+func getParams(req *http.Request) ([]byte, error) {
+	if req.Method == "GET" {
+		q := req.URL.Query()
+		return json.Marshal(q)
+	} else if req.Method == "POST" {
+		return io.ReadAll(req.Body)
+	}
+	return nil, fmt.Errorf("unsupport method%s", req.Method)
+}
+
 func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, proto.Message, error) {
 	filePath := "./api/" + api.AppName + ".proto"
 
@@ -152,7 +163,10 @@ func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, pr
 	dymsgInput := dynamic.NewMessage(input)
 	dymsgOuput := dynamic.NewMessage(output)
 
-	if err := dymsgInput.UnmarshalJSON(b); err != nil {
+	opt := jsonpb.Unmarshaler{}
+	opt.AllowUnknownFields = true
+
+	if err := dymsgInput.UnmarshalJSONPB(&opt, b); err != nil {
 		log.Error(ctx, "", zap.Error(err))
 		return nil, nil, err
 	}
@@ -161,6 +175,7 @@ func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, pr
 }
 
 func parseUrl(url string) (*Api, error) {
+	url = strings.Split(url, "?")[0]
 	str := strings.Split(url, "/")
 	if len(str) != 4 {
 		return nil, fmt.Errorf("path:%s parse failed", url)
