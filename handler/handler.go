@@ -45,7 +45,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	}
 
 	if len(svc) == 0 {
-		return "", fmt.Errorf("not found %s in cousul", serviceName)
+		return "", fmt.Errorf("rpc service %s unavailable", serviceName)
 	}
 
 	// TODO
@@ -56,6 +56,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 
 func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 	var err error
+	var resp Response
 
 	ctx, cancel := context.WithTimeout(req.Context(), 10*time.Second)
 	defer cancel()
@@ -67,8 +68,12 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if err != nil {
-			fmt.Fprint(w, err.Error())
+
+			resp.Data = nil
+			resp.Message = err.Error()
 		}
+
+		sendMsg(ctx, w, &resp)
 	}()
 
 	api, err := parseUrl(req.RequestURI)
@@ -110,15 +115,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	b, err := json.Marshal(output)
-	if err != nil {
-		log.Error(ctx, "json marshal failed", zap.Error(err))
-		return
-	}
-
-	// send response
-	log.Infof(ctx, "host:%s %s", req.Host, utils.TraceId(ctx))
-	fmt.Fprint(w, string(b))
+	resp.Data = output
 }
 
 type Api struct {
@@ -172,6 +169,19 @@ func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, pr
 	}
 
 	return dymsgInput, dymsgOuput, nil
+}
+
+func sendMsg(ctx context.Context, w http.ResponseWriter, resp *Response) error {
+	b, err := json.Marshal(resp)
+	if err != nil {
+		log.Error(ctx, "json marshal failed", zap.Error(err))
+		return err
+	}
+
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	fmt.Fprint(w, string(b))
+
+	return nil
 }
 
 func parseUrl(url string) (*Api, error) {
