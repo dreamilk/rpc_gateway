@@ -40,7 +40,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 
 	svc, _, err := client.Health().Service(serviceName, tag, false, nil)
 	if err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "search service failed", zap.Error(err))
 		return "", err
 	}
 
@@ -73,7 +73,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 
 	api, err := parseUrl(req.RequestURI)
 	if err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "parseUrl failed", zap.Error(err))
 		return
 	}
 	log.Info(ctx, "parse result", zap.Any("api", api))
@@ -90,7 +90,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 
 	addr, err := searchService(ctx, api.AppName, "")
 	if err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "serach service failed", zap.Error(err))
 		return
 	}
 	log.Info(ctx, "addr", zap.Any("addr", addr))
@@ -106,13 +106,13 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 
 	err = conn.Invoke(ctx, rpcPath, input, output)
 	if err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "conn invoke failed", zap.Error(err))
 		return
 	}
 
 	b, err := json.Marshal(output)
 	if err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "json marshal failed", zap.Error(err))
 		return
 	}
 
@@ -167,7 +167,7 @@ func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, pr
 	opt.AllowUnknownFields = true
 
 	if err := dymsgInput.UnmarshalJSONPB(&opt, b); err != nil {
-		log.Error(ctx, "", zap.Error(err))
+		log.Error(ctx, "UnmarshalJSONPB failed", zap.Error(err))
 		return nil, nil, err
 	}
 
