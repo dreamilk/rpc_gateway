@@ -4,16 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/hashicorp/consul/api"
+	"github.com/jhump/protoreflect/desc/protoparse"
+	"github.com/jhump/protoreflect/dynamic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/dreamilk/rpc_gateway/log"
 	"github.com/dreamilk/rpc_gateway/utils"
@@ -33,7 +37,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 		return "", err
 	}
 
-	svc, _, err := client.Health().Service(serviceName, tag, true, nil)
+	svc, _, err := client.Health().Service(serviceName, tag, false, nil)
 	if err != nil {
 		log.Error(ctx, "", zap.Error(err))
 		return "", err
@@ -50,41 +54,122 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 }
 
 func ServiceGateway(w http.ResponseWriter, req *http.Request) {
+	var err error
+
 	ctx, cancel := context.WithTimeout(req.Context(), 10*time.Second)
 	defer cancel()
 	ctx = utils.WithTraceId(ctx, uuid.NewString())
 
-	addr, err := searchService(ctx, "consul", "")
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf(ctx, "panic %v", r)
+		}
+
+		if err != nil {
+			fmt.Fprint(w, err.Error())
+		}
+	}()
+
+	api, err := parseUrl(req.RequestURI)
 	if err != nil {
 		log.Error(ctx, "", zap.Error(err))
+		return
+	}
+	log.Info(ctx, "parse result", zap.Any("api", api))
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return
+	}
+
+	input, output, err := genProtoMessage(ctx, api, body)
+	if err != nil {
+		return
+	}
+
+	addr, err := searchService(ctx, api.AppName, "")
+	if err != nil {
+		log.Error(ctx, "", zap.Error(err))
+		return
 	}
 	log.Info(ctx, "addr", zap.Any("addr", addr))
-
-	// check url valid
-	var input proto.Message
-	var output proto.Message
 
 	// invoke rpc
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Error(ctx, "grpc.Dial failed", zap.Error(err))
+		return
 	}
 
-	rpcPath := ""
+	rpcPath := api.RpcMethod
 
 	err = conn.Invoke(ctx, rpcPath, input, output)
 	if err != nil {
 		log.Error(ctx, "", zap.Error(err))
+		return
 	}
 
 	b, err := json.Marshal(output)
 	if err != nil {
 		log.Error(ctx, "", zap.Error(err))
+		return
 	}
 
 	// send response
-
 	log.Infof(ctx, "host:%s %s", req.Host, utils.TraceId(ctx))
 	fmt.Fprint(w, string(b))
+}
 
+type Api struct {
+	AppName     string
+	ServiceName string
+	Path        string
+	RpcMethod   string
+}
+
+func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, proto.Message, error) {
+	filePath := "./api/" + api.AppName + ".proto"
+
+	p := protoparse.Parser{}
+	fds, err := p.ParseFiles(filePath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sd := fds[0].FindService(api.ServiceName)
+	if sd == nil {
+		return nil, nil, fmt.Errorf("not found service: %s", api.ServiceName)
+	}
+
+	md := sd.FindMethodByName(api.Path)
+	if md == nil {
+		return nil, nil, fmt.Errorf("not found method: %s", api.Path)
+	}
+
+	input := md.GetInputType()
+	output := md.GetOutputType()
+
+	dymsgInput := dynamic.NewMessage(input)
+	dymsgOuput := dynamic.NewMessage(output)
+
+	if err := dymsgInput.UnmarshalJSON(b); err != nil {
+		log.Error(ctx, "", zap.Error(err))
+		return nil, nil, err
+	}
+
+	return dymsgInput, dymsgOuput, nil
+}
+
+func parseUrl(url string) (*Api, error) {
+	str := strings.Split(url, "/")
+	if len(str) != 4 {
+		return nil, fmt.Errorf("path:%s parse failed", url)
+	}
+
+	return &Api{
+		AppName:     str[1],
+		ServiceName: str[2],
+		Path:        str[3],
+		RpcMethod:   str[2] + "/" + str[3],
+	}, nil
 }
