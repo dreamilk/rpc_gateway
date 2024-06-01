@@ -10,12 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/hashicorp/consul/api"
-	"github.com/jhump/protoreflect/desc/protoparse"
-	"github.com/jhump/protoreflect/dynamic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -81,7 +77,6 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		log.Error(ctx, "parseUrl failed", zap.Error(err))
 		return
 	}
-	log.Info(ctx, "parse result", zap.Any("api", api))
 
 	body, err := getParams(req)
 	if err != nil {
@@ -98,7 +93,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		log.Error(ctx, "serach service failed", zap.Error(err))
 		return
 	}
-	log.Info(ctx, "addr", zap.Any("addr", addr))
+	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", api.Url))
 
 	// invoke rpc
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -121,8 +116,9 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 type Api struct {
 	AppName     string
 	ServiceName string
-	Path        string
+	MethodName  string
 	RpcMethod   string
+	Url         string
 }
 
 func getParams(req *http.Request) ([]byte, error) {
@@ -133,42 +129,6 @@ func getParams(req *http.Request) ([]byte, error) {
 		return io.ReadAll(req.Body)
 	}
 	return nil, fmt.Errorf("unsupport method%s", req.Method)
-}
-
-func genProtoMessage(ctx context.Context, api *Api, b []byte) (proto.Message, proto.Message, error) {
-	filePath := "./api/" + api.AppName + ".proto"
-
-	p := protoparse.Parser{}
-	fds, err := p.ParseFiles(filePath)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	sd := fds[0].FindService(api.ServiceName)
-	if sd == nil {
-		return nil, nil, fmt.Errorf("not found service: %s", api.ServiceName)
-	}
-
-	md := sd.FindMethodByName(api.Path)
-	if md == nil {
-		return nil, nil, fmt.Errorf("not found method: %s", api.Path)
-	}
-
-	input := md.GetInputType()
-	output := md.GetOutputType()
-
-	dymsgInput := dynamic.NewMessage(input)
-	dymsgOuput := dynamic.NewMessage(output)
-
-	opt := jsonpb.Unmarshaler{}
-	opt.AllowUnknownFields = true
-
-	if err := dymsgInput.UnmarshalJSONPB(&opt, b); err != nil {
-		log.Error(ctx, "UnmarshalJSONPB failed", zap.Error(err))
-		return nil, nil, err
-	}
-
-	return dymsgInput, dymsgOuput, nil
 }
 
 func sendMsg(ctx context.Context, w http.ResponseWriter, resp *Response) error {
@@ -194,7 +154,8 @@ func parseUrl(url string) (*Api, error) {
 	return &Api{
 		AppName:     str[1],
 		ServiceName: str[2],
-		Path:        str[3],
+		MethodName:  str[3],
 		RpcMethod:   str[2] + "/" + str[3],
+		Url:         url,
 	}, nil
 }

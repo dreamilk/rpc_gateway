@@ -14,7 +14,7 @@ func TestGenMsg(t *testing.T) {
 	api := Api{
 		AppName:     "hello_world",
 		ServiceName: "api.Test",
-		Path:        "Ping",
+		MethodName:  "Ping",
 	}
 
 	os.Chdir("../")
