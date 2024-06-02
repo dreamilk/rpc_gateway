@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dreamilk/rpc_gateway/cache"
 	"github.com/dreamilk/rpc_gateway/log"
 	"github.com/dreamilk/rpc_gateway/utils"
 )
@@ -26,7 +27,16 @@ type Response struct {
 	Data    interface{} `json:"data"`
 }
 
+var serviceAddrCache = cache.NewCache()
+
 func searchService(ctx context.Context, serviceName string, tag string) (string, error) {
+	// use chace to find service addr in consul
+	v, err := serviceAddrCache.Get(serviceName)
+	if err == nil {
+		return v.(string), nil
+	}
+	log.Error(ctx, "cache error", zap.Error(err))
+
 	// Create a Consul API client
 	client, err := api.NewClient(api.DefaultConfig())
 	if err != nil {
@@ -47,6 +57,9 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	// TODO
 	// load balance
 	addr := svc[0].Node.Address + ":" + strconv.Itoa(svc[0].Service.Port)
+
+	serviceAddrCache.Set(serviceName, addr)
+
 	return addr, nil
 }
 
@@ -61,6 +74,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf(ctx, "panic %v", r)
+			err = fmt.Errorf("panic: %v", r)
 		}
 
 		if err != nil {
@@ -72,7 +86,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		sendMsg(ctx, w, &resp)
 	}()
 
-	api, err := parseUrl(req.RequestURI)
+	requestApi, err := parseUrl(req.RequestURI)
 	if err != nil {
 		log.Error(ctx, "parseUrl failed", zap.Error(err))
 		return
@@ -83,34 +97,54 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	input, output, err := genProtoMessage(ctx, api, body)
+	input, output, err := genProtoMessage(ctx, requestApi, body)
 	if err != nil {
 		return
 	}
 
-	addr, err := searchService(ctx, api.AppName, "")
+	addr, err := searchService(ctx, requestApi.AppName, "")
 	if err != nil {
 		log.Error(ctx, "serach service failed", zap.Error(err))
 		return
 	}
-	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", api.Url))
+	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", requestApi.Url))
 
 	// invoke rpc
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Error(ctx, "grpc.Dial failed", zap.Error(err))
-		return
-	}
-
-	rpcPath := api.RpcMethod
-
-	err = conn.Invoke(ctx, rpcPath, input, output)
-	if err != nil {
-		log.Error(ctx, "conn invoke failed", zap.Error(err))
+	if err := invokeRpc(ctx, addr, requestApi.RpcMethod, input, output); err != nil {
+		log.Error(ctx, "invoke rpc failed", zap.Error(err))
 		return
 	}
 
 	resp.Data = output
+}
+
+var connCache = cache.NewCache()
+
+func invokeRpc(ctx context.Context, addr string, rpcMethod string, input any, output any) error {
+	key := addr + rpcMethod
+
+	conn, err := connCache.Get(key)
+	if err != nil {
+		log.Error(ctx, "no found conn in cache", zap.Error(err))
+		connection, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Error(ctx, "grpc.Dial failed", zap.Error(err))
+			return err
+		}
+
+		connCache.Set(key, connection)
+		conn = connection
+	}
+	// invoke rpc
+	c := conn.(*grpc.ClientConn)
+
+	err = c.Invoke(ctx, rpcMethod, input, output)
+	if err != nil {
+		log.Error(ctx, "conn invoke failed", zap.Error(err))
+		return err
+	}
+	return nil
+
 }
 
 type Api struct {
