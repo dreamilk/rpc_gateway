@@ -8,7 +8,8 @@ import (
 )
 
 type DeployConfig struct {
-	Addr string `yaml:"addr"`
+	Addr   string `yaml:"addr"`
+	Consul string `yaml:"consul"`
 }
 
 const (

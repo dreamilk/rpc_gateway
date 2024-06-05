@@ -16,6 +16,7 @@ RUN cd ./src && \
 RUN cd ./src && \
     cp gateway ../ && \
     cp *yaml ../ && \
+    cp -r ./api ../ && \
     cd ../ && \
     rm -rf ./src && \
     ls -al

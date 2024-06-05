@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dreamilk/rpc_gateway/cache"
+	"github.com/dreamilk/rpc_gateway/config"
 	"github.com/dreamilk/rpc_gateway/log"
 	"github.com/dreamilk/rpc_gateway/utils"
 )
@@ -38,7 +39,10 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	log.Error(ctx, "cache error", zap.Error(err))
 
 	// Create a Consul API client
-	client, err := api.NewClient(api.DefaultConfig())
+	conf := api.DefaultConfig()
+	conf.Address = config.DeployConf.Consul
+
+	client, err := api.NewClient(conf)
 	if err != nil {
 		log.Error(ctx, "NewClient failed", zap.Error(err))
 		return "", err
