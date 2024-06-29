@@ -114,7 +114,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", requestApi.Url))
 
 	// invoke rpc
-	if err := invokeRpc(ctx, addr, requestApi.RpcMethod, input, output); err != nil {
+	if err = invokeRpc(ctx, addr, requestApi.RpcMethod, input, output); err != nil {
 		log.Error(ctx, "invoke rpc failed", zap.Error(err))
 		return
 	}
