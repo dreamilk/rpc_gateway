@@ -129,7 +129,7 @@ func invokeRpc(ctx context.Context, addr string, rpcMethod string, input any, ou
 
 	conn, err := connCache.Get(key)
 	if err != nil {
-		log.Error(ctx, "no found conn in cache", zap.Error(err))
+		log.Warn(ctx, "no found conn in cache", zap.Error(err))
 		connection, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Error(ctx, "grpc.Dial failed", zap.Error(err))
