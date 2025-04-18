@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
+	cache "github.com/dreamilk/go-cache"
 	"github.com/google/uuid"
 	"github.com/hashicorp/consul/api"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/dreamilk/rpc_gateway/cache"
 	"github.com/dreamilk/rpc_gateway/config"
 	"github.com/dreamilk/rpc_gateway/log"
 	"github.com/dreamilk/rpc_gateway/utils"
@@ -28,15 +28,15 @@ type Response struct {
 	Data    interface{} `json:"data"`
 }
 
-var serviceAddrCache = cache.NewCache()
+var serviceAddrCache = cache.New[string](5*time.Second, 3*time.Second)
 
 func searchService(ctx context.Context, serviceName string, tag string) (string, error) {
 	// use chace to find service addr in consul
-	v, err := serviceAddrCache.Get(serviceName)
-	if err == nil {
-		return v.(string), nil
+	v, ok := serviceAddrCache.Get(serviceName)
+	if ok {
+		return v, nil
 	}
-	log.Warn(ctx, "cache error", zap.Error(err))
+	log.Warn(ctx, "no found service in cache", zap.String("serviceName", serviceName))
 
 	// Create a Consul API client
 	conf := api.DefaultConfig()
@@ -62,7 +62,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	// load balance
 	addr := svc[0].Node.Address + ":" + strconv.Itoa(svc[0].Service.Port)
 
-	serviceAddrCache.Set(serviceName, addr)
+	serviceAddrCache.Set(serviceName, addr, 5*time.Second)
 
 	return addr, nil
 }
@@ -122,32 +122,25 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 	resp.Data = output
 }
 
-var connCache = cache.NewCache()
+var connCache = cache.New[*grpc.ClientConn](time.Minute, 5*time.Second)
 
 func invokeRpc(ctx context.Context, addr string, rpcMethod string, input any, output any) error {
 	key := addr + rpcMethod
 
-	conn, err := connCache.Get(key)
-	if err != nil {
-		log.Warn(ctx, "no found conn in cache", zap.Error(err))
+	conn, ok := connCache.Get(key)
+	if !ok {
+		log.Warn(ctx, "no found conn in cache", zap.String("key", key))
 		connection, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			log.Error(ctx, "grpc.Dial failed", zap.Error(err))
 			return err
 		}
 
-		connCache.Set(key, connection)
+		connCache.Set(key, connection, 10*time.Second)
 		conn = connection
 	}
 	// invoke rpc
-	c := conn.(*grpc.ClientConn)
-
-	err = c.Invoke(ctx, rpcMethod, input, output)
-	if err != nil {
-		log.Error(ctx, "conn invoke failed", zap.Error(err))
-		return err
-	}
-	return nil
+	return conn.Invoke(ctx, rpcMethod, input, output)
 }
 
 type Api struct {
