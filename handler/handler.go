@@ -28,7 +28,7 @@ type Response struct {
 	Data    interface{} `json:"data"`
 }
 
-var serviceAddrCache = cache.New[string](5*time.Second, 3*time.Second)
+var serviceAddrCache = cache.New[string](30*time.Second, 3*time.Second)
 
 func searchService(ctx context.Context, serviceName string, tag string) (string, error) {
 	// use chace to find service addr in consul
@@ -62,7 +62,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	// load balance
 	addr := svc[0].Node.Address + ":" + strconv.Itoa(svc[0].Service.Port)
 
-	serviceAddrCache.Set(serviceName, addr, 5*time.Second)
+	serviceAddrCache.Set(serviceName, addr, cache.DefaultExpiration)
 
 	return addr, nil
 }
@@ -136,7 +136,7 @@ func invokeRpc(ctx context.Context, addr string, rpcMethod string, input any, ou
 			return err
 		}
 
-		connCache.Set(key, connection, 10*time.Second)
+		connCache.Set(key, connection, cache.DefaultExpiration)
 		conn = connection
 	}
 	// invoke rpc
