@@ -23,8 +23,10 @@ type ApiInfo struct {
 	OuputType   *desc.MessageDescriptor
 }
 
-var m = make(map[string]*ApiInfo)
-var mtx sync.Mutex
+var (
+	m   = make(map[string]*ApiInfo)
+	mtx sync.Mutex
+)
 
 func getApiInfo(ctx context.Context, api *Api) (*ApiInfo, error) {
 	mtx.Lock()
@@ -41,7 +43,18 @@ func getApiInfo(ctx context.Context, api *Api) (*ApiInfo, error) {
 			return nil, err
 		}
 
-		sd := fds[0].FindService(api.ServiceName)
+		log.Infof(ctx, "fds: %v", fds)
+
+		var sd *desc.ServiceDescriptor
+		for _, fd := range fds {
+			for _, s := range fd.GetServices() {
+				if s.GetName() == api.ServiceName {
+					sd = s
+					break
+				}
+			}
+		}
+
 		if sd == nil {
 			return nil, fmt.Errorf("not found service: %s", api.ServiceName)
 		}
