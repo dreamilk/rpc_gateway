@@ -28,7 +28,7 @@ type Response struct {
 	Data    interface{} `json:"data"`
 }
 
-var serviceAddrCache = cache.New[string](30*time.Second, 3*time.Second)
+var serviceAddrCache = cache.New[string](5*time.Second, 3*time.Second)
 
 func searchService(ctx context.Context, serviceName string, tag string) (string, error) {
 	// use chace to find service addr in consul
