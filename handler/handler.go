@@ -36,7 +36,7 @@ func searchService(ctx context.Context, serviceName string, tag string) (string,
 	if err == nil {
 		return v.(string), nil
 	}
-	log.Error(ctx, "cache error", zap.Error(err))
+	log.Warn(ctx, "cache error", zap.Error(err))
 
 	// Create a Consul API client
 	conf := api.DefaultConfig()
@@ -111,7 +111,7 @@ func ServiceGateway(w http.ResponseWriter, req *http.Request) {
 		log.Error(ctx, "serach service failed", zap.Error(err))
 		return
 	}
-	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", requestApi.Url))
+	log.Info(ctx, "addr", zap.Any("addr", addr), zap.Any("url", requestApi.Url), zap.Any("rpcMethod", requestApi.RpcMethod))
 
 	// invoke rpc
 	if err = invokeRpc(ctx, addr, requestApi.RpcMethod, input, output); err != nil {
@@ -148,7 +148,6 @@ func invokeRpc(ctx context.Context, addr string, rpcMethod string, input any, ou
 		return err
 	}
 	return nil
-
 }
 
 type Api struct {
@@ -193,7 +192,7 @@ func parseUrl(url string) (*Api, error) {
 		AppName:     str[1],
 		ServiceName: str[2],
 		MethodName:  str[3],
-		RpcMethod:   str[2] + "/" + str[3],
+		RpcMethod:   fmt.Sprintf("/%s.%s/%s", str[1], str[2], str[3]),
 		Url:         url,
 	}, nil
 }

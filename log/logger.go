@@ -28,3 +28,11 @@ func Error(ctx context.Context, msg string, fields ...zapcore.Field) {
 func Errorf(ctx context.Context, format string, args ...any) {
 	getDefaultLogger().Error(fmt.Sprintf(format, args...))
 }
+
+func Warn(ctx context.Context, msg string, fields ...zapcore.Field) {
+	getDefaultLogger().Warn(msg, fields...)
+}
+
+func Warnf(ctx context.Context, format string, args ...any) {
+	getDefaultLogger().Warn(fmt.Sprintf(format, args...))
+}

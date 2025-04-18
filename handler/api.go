@@ -43,8 +43,6 @@ func getApiInfo(ctx context.Context, api *Api) (*ApiInfo, error) {
 			return nil, err
 		}
 
-		log.Infof(ctx, "fds: %v", fds)
-
 		var sd *desc.ServiceDescriptor
 		for _, fd := range fds {
 			for _, s := range fd.GetServices() {
